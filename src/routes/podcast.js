@@ -103,7 +103,7 @@ async function synthesizeVoice(text, voiceId) {
   return buffer.toString('base64');
 }
 
-function buildScriptPrompt(topic, context, langCode, tone, participants, duration) {
+function buildScriptPrompt(topic, context, langCode, tone, participants, duration, hostConfig = null) {
   const langName  = LANG_NAMES[langCode] || 'English';
   const cfg       = DURATION_CFG[duration] || DURATION_CFG[15];
   const guestList = participants.map(p =>
@@ -114,7 +114,7 @@ function buildScriptPrompt(topic, context, langCode, tone, participants, duratio
 
 Topic: "${topic}"
 ${context ? `Context the guests know:\n${context}\n` : ''}
-Guests:
+${hostLine}Guests:
 ${guestList}
 
 Target: ${cfg.exchanges} exchanges total. Write ALL of them now — do not stop early.
@@ -168,7 +168,7 @@ Return ONLY valid JSON array, zero markdown, zero explanation:
 
 // ── Generate podcast ───────────────────────────────────
 router.post('/generate', requireAuth, async (req, res) => {
-  const { topic, context, language, tone, duration, participants } = req.body;
+  const { topic, context, language, tone, duration, participants, hostConfig } = req.body;
 
   if (!topic || !participants || participants.length < 2) {
     return res.status(400).json({ error: 'topic and at least 2 participants required' });
@@ -183,7 +183,7 @@ router.post('/generate', requireAuth, async (req, res) => {
 
   try {
     const cfg    = DURATION_CFG[duration] || DURATION_CFG[15];
-    const prompt = buildScriptPrompt(topic, context, language, tone, participants, duration);
+    const prompt = buildScriptPrompt(topic, context, language, tone, participants, duration, hostConfig);
 
     const raw = await callAnthropic(
       'You are a professional podcast scriptwriter. You write complete, natural, human-sounding dialogue.',
@@ -204,14 +204,28 @@ router.post('/generate', requireAuth, async (req, res) => {
     if (allTurns.length < 5) throw new Error('Script too short — please try again');
 
     // Build voiceMap: assign each unique speaker a distinct voice
-    // Strategy: try name match first, then assign by order of first appearance
-    // This guarantees no two speakers share a voice
     const uniqueSpeakers = [...new Set(allTurns.map(t => t.speaker))];
     const usedVoiceIds   = new Set();
     const voiceMap       = {};
 
+    // Pre-register host voice so guests never get the same one
+    if (hostConfig?.name && hostConfig?.voiceId) {
+      usedVoiceIds.add(hostConfig.voiceId);
+    }
+
     uniqueSpeakers.forEach((speaker, i) => {
-      // 1. Exact name match
+      // Check if this is the host
+      if (hostConfig?.name) {
+        const hostLower    = hostConfig.name.toLowerCase();
+        const speakerLower = speaker.toLowerCase();
+        if (speakerLower === hostLower || speakerLower.startsWith(hostLower.split(' ')[0])) {
+          voiceMap[speaker] = hostConfig.voiceId;
+          usedVoiceIds.add(hostConfig.voiceId);
+          return;
+        }
+      }
+
+      // 1. Exact name match with participants
       let p = participants.find(x => x.name === speaker);
       // 2. Case-insensitive
       if (!p) p = participants.find(x => x.name.toLowerCase() === speaker.toLowerCase());
@@ -220,9 +234,11 @@ router.post('/generate', requireAuth, async (req, res) => {
         const fn = speaker.split(' ')[0].toLowerCase();
         p = participants.find(x => x.name.toLowerCase().startsWith(fn));
       }
-      // 4. Pick next participant whose voice hasn't been used
-      if (!p) p = participants.find(x => !usedVoiceIds.has(x.voiceId));
-      // 5. Final fallback — cycle through participants
+      // 4. Next participant whose voice hasn't been used yet
+      if (!p || usedVoiceIds.has(p.voiceId)) {
+        p = participants.find(x => !usedVoiceIds.has(x.voiceId));
+      }
+      // 5. Final fallback
       if (!p) p = participants[i % participants.length];
 
       const voiceId = p?.voiceId || participants[0]?.voiceId;
