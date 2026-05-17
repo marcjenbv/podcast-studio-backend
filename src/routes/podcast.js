@@ -98,10 +98,15 @@ async function synthesizeDialogueChunk(inputs, retries = 3) {
       }),
     });
     if (!res.ok) {
-      const e = await res.json().catch(() => ({}));
-      const msg = e.detail?.message || e.detail?.status || `ElevenLabs HTTP ${res.status}`;
+      const body = await res.text().catch(() => '{}');
+      console.error('ElevenLabs Dialogue API error:', res.status, body);
+      let msg;
+      try { msg = JSON.parse(body)?.detail?.message || JSON.parse(body)?.detail?.status || body; }
+      catch { msg = body; }
       if (res.status === 429) throw new Error(`429 rate_limit: ${msg}`);
-      throw new Error(msg);
+      if (res.status === 401) throw new Error(`ElevenLabs auth failed — check your API key`);
+      if (res.status === 403) throw new Error(`ElevenLabs plan does not support Text-to-Dialogue (eleven_v3 requires paid plan)`);
+      throw new Error(`ElevenLabs ${res.status}: ${msg}`);
     }
     const buffer = await res.buffer();
     return buffer.toString('base64');
@@ -375,7 +380,7 @@ router.post('/generate', requireAuth, async (req, res) => {
 // ── Synthesize one turn ────────────────────────────────
 // ── Synthesize a chunk of dialogue turns (multi-speaker, one audio file) ──
 router.post('/synthesize-dialogue', requireAuth, async (req, res) => {
-  const { inputs } = req.body; // [{text, voice_id}]
+  const { inputs } = req.body;
   if (!inputs || !Array.isArray(inputs) || inputs.length === 0) {
     return res.status(400).json({ error: 'inputs array required' });
   }
@@ -383,8 +388,9 @@ router.post('/synthesize-dialogue', requireAuth, async (req, res) => {
     const audio = await synthesizeDialogueChunk(inputs);
     res.json({ audio });
   } catch(e) {
-    console.error('Dialogue TTS error:', e.message);
-    res.status(500).json({ error: e.message });
+    console.error('Dialogue TTS error FULL:', e.message);
+    // Return the real error so frontend can show it
+    res.status(500).json({ error: e.message, detail: e.message });
   }
 });
 
