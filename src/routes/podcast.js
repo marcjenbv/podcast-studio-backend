@@ -170,6 +170,22 @@ router.post('/generate', requireAuth, async (req, res) => {
 
     if (allTurns.length < 5) throw new Error('Script too short — please try again');
 
+    // Build a speaker->voiceId map so the frontend knows which voice to use
+    // Match by position if names differ slightly
+    const uniqueSpeakers = [...new Set(allTurns.map(t => t.speaker))];
+    const voiceMap = {};
+    uniqueSpeakers.forEach((speaker, i) => {
+      // Try exact match first
+      let p = participants.find(x => x.name === speaker);
+      // Try case-insensitive
+      if (!p) p = participants.find(x => x.name.toLowerCase() === speaker.toLowerCase());
+      // Try first name
+      if (!p) p = participants.find(x => x.name.toLowerCase().startsWith(speaker.split(' ')[0].toLowerCase()));
+      // Fall back to position
+      if (!p) p = participants[i % participants.length];
+      voiceMap[speaker] = p?.voiceId || participants[0]?.voiceId;
+    });
+
     // Deduct minutes
     const plan = PLANS[req.user.subscription_plan];
     if (!plan) {
@@ -210,7 +226,7 @@ router.post('/generate', requireAuth, async (req, res) => {
       turns:        JSON.stringify(allTurns),
     }).select('id').single();
 
-    res.json({ podcastId: podcast?.id, turns: allTurns });
+    res.json({ podcastId: podcast?.id, turns: allTurns, voiceMap });
 
   } catch(e) {
     console.error('Generation error:', e.message);
