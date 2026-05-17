@@ -311,11 +311,9 @@ function buildSeriesEpisodePrompt(topic, context, langCode, tone, participants, 
   const cfg       = DURATION_CFG[duration] || DURATION_CFG[15];
   const guestList = participants.map(p =>
     `- ${p.name} (${p.role})${p.focus ? ' — angle: ' + p.focus : ''}`
-  ).join('
-');
+  ).join('\n');
   const hostLine  = hostConfig && hostConfig.name
-    ? `Host (guides discussion, does NOT debate): ${hostConfig.name}
-`
+    ? `Host (guides discussion, does NOT debate): ${hostConfig.name}\n`
     : '';
 
   return `Write Episode ${episodeNumber} of ${totalEpisodes} of a podcast series titled "${seriesTitle}" in ${langName}.
