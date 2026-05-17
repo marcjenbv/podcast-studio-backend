@@ -17,6 +17,9 @@ app.post('/stripe/webhook',
   require('./routes/stripe').webhook
 );
 
+// ── Trust Railway's proxy ────────────────────────────
+app.set('trust proxy', 1);
+
 // ── CORS — allow all origins ─────────────────────────
 const corsOptions = {
   origin: '*',
