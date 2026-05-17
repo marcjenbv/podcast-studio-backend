@@ -193,78 +193,100 @@ function buildScriptPrompt(topic, context, langCode, tone, participants, duratio
     ? `Host (guides discussion, asks questions, does NOT debate): ${hostConfig.name}\n`
     : '';
 
-  return `Write a COMPLETE ${duration}-minute ${tone.toLowerCase()} podcast script in ${langName}.
+  return `Write a COMPLETE ${duration}-minute ${tone.toLowerCase()} podcast in ${langName}.
 
 Topic: "${topic}"
-${context ? `Background the guests know:\n${context}\n` : ''}
+${context ? `Background:\n${context}\n` : ''}
 ${hostLine}Guests:
 ${guestList}
 
-TARGET: ${cfg.exchanges} exchanges. Write ALL of them. Do not stop early.
+TARGET: ${cfg.exchanges} exchanges. Write ALL of them.
 
-━━━ CRITICAL: YOU ARE WRITING FOR ELEVENLABS eleven_v3 TEXT-TO-DIALOGUE ━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOU ARE WRITING FOR ELEVENLABS eleven_v3
+[audio tags] = PERFORMANCE DIRECTIONS, not spoken words
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-The model renders [audio tags] as PERFORMANCE DIRECTIONS — not spoken words.
-Use them in every single turn. They make voices sound human, not robotic.
+WHAT MAKES CONVERSATION SOUND HUMAN — apply all of these:
 
-AVAILABLE AUDIO TAGS (use these constantly):
-[laughs] [chuckles] [sighs] [exhales sharply] [hesitant] [frustrated] [excited]
-[surprised] [interrupting] [skeptical] [thoughtful] [leaning in] [trailing off]
-[under breath] [scoffs] [nervous laugh] [emphatic] [quietly] [dryly]
+1. FILLERS & DISFLUENCIES (6% of real speech per linguistics research)
+   "uh", "um", "I mean", "you know", "like", "well", "so", "right"
+   "It's— it's weird." / "I uh— yeah, okay, fair."
+   DO NOT write clean polished sentences. Real people don't speak in polished sentences.
 
-HOW REAL CONVERSATIONS SOUND — write exactly like this:
+2. INCOMPLETE THOUGHTS & RESTARTS
+   "The thing is— no wait, that's not what I mean."
+   "It's more like— okay, think of it this way."
+   "I was going to say— actually, you know what, never mind."
 
-PEOPLE DON'T FINISH THOUGHTS CLEANLY:
-Bad:  "The algorithmic amplification creates problematic filter bubbles."
-Good: "[sighs] It's the algorithm. It just… keeps showing you the same thing."
+3. REFERENCING WHAT WAS JUST SAID
+   If Alex said "five companies control everything" →
+   Sara says "[skeptical] 'Five companies.' Okay. Which five?"
+   People repeat the other person's exact words back constantly.
 
-INTERRUPTIONS — use a dash when someone gets cut off:
-"But if you look at the data from—"
-"[interrupting] The data is wrong."
+4. BACKCHANNELS — short turns that show you're listening:
+   "Right." / "Yeah." / "Okay." / "Huh." / "Really?" / "Come on."
+   These are FULL TURNS, not additions to other turns.
 
-SHORT REACTIVE TURNS are normal and common:
-"[skeptical] Right." / "[laughs] Okay." / "[frustrated] No." / "[surprised] Wait, what?"
+5. TANGENTS & CIRCLES BACK
+   Someone goes off on a related story, then someone pulls it back:
+   "— wait, we're getting off topic."
+   "— but that's kind of the point though, right?"
 
-PEOPLE THINK OUT LOUD:
-"[hesitant] I mean… yeah, maybe." / "[thoughtful] It's— I don't know, it's complicated."
+6. SELF-CORRECTION & HEDGING
+   "Well— I don't know if that's exactly right, but—"
+   "That's— that's probably too strong a way to put it."
+   "Maybe I'm wrong about this but—"
 
-EXAMPLE OF EXACTLY HOW TO WRITE THIS (copy this style):
-{"speaker":"Tom","text":"[leaning in] Okay. Marx versus Keynes in 2025. Alex — who wins?"}
-{"speaker":"Alex","text":"[without hesitation] Marx. Not because he was right, but—"}
-{"speaker":"Sara","text":"[interrupting] Oh come ON."}
-{"speaker":"Alex","text":"[laughs] Let me finish! He predicted consolidation. Five companies own 80% of ad spend."}
-{"speaker":"Sara","text":"[sighs] They compete with each other."}
-{"speaker":"Alex","text":"The commodity is you, Sara. Your attention. You can't shop for a different version of yourself."}
-{"speaker":"Tom","text":"[surprised] That's… kind of dark actually."}
-{"speaker":"Sara","text":"[laughs softly] It is. But Keynes would say—"}
+AUDIO TAGS (use in EVERY turn, match to content):
+[laughs] [chuckles] [sighs] [exhales] [hesitant] [frustrated] [excited]
+[surprised] [interrupting] [skeptical] [thoughtful] [leaning in] [scoffs]
+[nervous laugh] [emphatic] [quietly] [dryly] [trailing off] [under breath]
+
+REAL CONVERSATION EXAMPLE — study every line:
+{"speaker":"Tom","text":"[leaning in] Alright. So, uh— Marx versus Keynes in 2025. Alex, who wins?"}
+{"speaker":"Alex","text":"[without hesitation] Marx. Not— I mean, not because he was right about everything, but—"}
+{"speaker":"Sara","text":"[interrupting] Oh come on."}
+{"speaker":"Alex","text":"[laughs] Let me— let me finish! He predicted consolidation. Like, five companies own 80% of digital ad spend. Five."}
+{"speaker":"Sara","text":"[sighs] They compete with each other though."}
+{"speaker":"Alex","text":"[emphatic] The commodity is you, Sara. Your attention. You can't— you can't shop around for a different version of yourself."}
+{"speaker":"Tom","text":"[surprised] Huh. That's... kind of dark actually."}
+{"speaker":"Sara","text":"[dryly] It is dark. But— okay, but Keynes would say the market corrects."}
 {"speaker":"Alex","text":"[skeptical] In 2008?"}
 {"speaker":"Sara","text":"[exhales] ...Fair point."}
-{"speaker":"Tom","text":"Do you two agree on anything?"}
-{"speaker":"Sara","text":"[dryly] That it's a problem."}
-{"speaker":"Alex","text":"[trailing off] Yeah. It's a problem. I just… [quietly] I don't know what you do about it."}
+{"speaker":"Tom","text":"Do you two— do you agree on anything?"}
+{"speaker":"Sara","text":"[laughs softly] That it's a problem."}
+{"speaker":"Alex","text":"[thoughtful] Yeah. Yeah, it's definitely— [quietly] I don't know what you actually do about it."}
+{"speaker":"Tom","text":"[under breath] Nobody does."}
 
-PUNCTUATION RULES for natural rhythm:
-- Ellipsis (…) = hesitation, trailing off: "I mean… maybe."
-- Em dash (—) = interruption or sudden change: "But the thing is—" / "—which is why it failed."
-- Short sentence = punchy, reactive. Long = building an argument.
+NOTICE IN THE EXAMPLE:
+- Every turn starts with [audio tag]
+- Fillers: "uh", "I mean", "like", "actually", "yeah", "okay"
+- Incomplete thoughts: "Not— I mean, not because", "You can't— you can't"
+- Backchannel full turn: "In 2008?" / "Fair point." / "It is dark."
+- Self-correction: "Yeah. Yeah, it's definitely—"
+- Short punchy turns mixed with longer ones
 
-CONVERSATION ARC across ${cfg.exchanges} exchanges:
-- First 10%: fast intros, each person stakes position, tension appears immediately  
-- 10-70%: back and forth — direct challenges, specific examples, data, interruptions, reactions
-- 70-85%: something shifts — unexpected agreement, or a question nobody can answer
-- 85-100%: honest landing — what does each person actually believe? Leave tension unresolved.
+PERSONALITY CONSISTENCY — each guest speaks differently:
+${participants.map((p, i) => `- ${p.name}: ${p.role}${p.focus ? '. ' + p.focus : ''}. Keep this voice consistent throughout.`).join('\n')}
 
-ABSOLUTE RULES:
+ARC across ${cfg.exchanges} exchanges:
+- First 10%: quick intros, positions established fast, tension emerges
+- 10-70%: real back-and-forth — challenges, specific examples, data, interruptions
+- 70-85%: something shifts — unexpected agreement or unanswerable question
+- 85-100%: honest landing — what does each person actually believe? Leave it unresolved.
+
+HARD RULES:
 - ALL text in ${langName}
-- EVERY turn must start with an [audio tag]
-- Most turns under 25 words
-- NEVER "Great point", "Absolutely", "That's fascinating", "Indeed"
-- Be specific: real names, real numbers, real events, real companies
-- Each guest keeps a consistent personality throughout
-- Never mention being on a podcast or being an AI
+- EVERY turn starts with [audio tag]
+- Use fillers and disfluencies in EVERY turn
+- Most turns under 30 words
+- ZERO "Great point", "Absolutely", "That's fascinating", "Indeed", "Certainly"
+- Specific: real names, real numbers, real companies, real events
+- NEVER mention being on a podcast or being an AI
 
-Return ONLY valid JSON array, zero markdown, zero explanation:
-[{"speaker":"ExactGuestName","text":"[tag] words spoken"},...]`;
+Return ONLY valid JSON. Zero markdown. Start immediately with [:
+[{"speaker":"ExactName","text":"[tag] words with uh fillers and— incomplete thoughts"},...]`;
 }
 
 // ── Generate podcast ───────────────────────────────────
