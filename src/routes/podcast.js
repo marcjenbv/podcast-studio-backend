@@ -690,6 +690,21 @@ router.post('/generate-episode', requireAuth, async (req, res) => {
   }
 });
 
+// ── Voice preview proxy ───────────────────────────────
+router.get('/voice-preview/:voiceId', async (req, res) => {
+  const { voiceId } = req.params;
+  const url = `https://storage.googleapis.com/eleven-public-prod/premade/voices/${voiceId}/preview.mp3`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return res.status(404).json({ error: 'Preview not found' });
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    r.body.pipe(res);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── History ────────────────────────────────────────────
 router.get('/history', requireAuth, async (req, res) => {
   const { data, error } = await supabase.from('podcasts')
