@@ -202,91 +202,106 @@ ${guestList}
 
 TARGET: ${cfg.exchanges} exchanges. Write ALL of them.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-YOU ARE WRITING FOR ELEVENLABS eleven_v3
-[audio tags] = PERFORMANCE DIRECTIONS, not spoken words
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━ ELEVENLABS ELEVEN_V3 AUDIO DIRECTION ━━━
+[tags] = PERFORMANCE DIRECTIONS, never spoken aloud.
+Tags apply until the next pause/sentence break.
+COMBINE TAGS for richer delivery: [fast-paced, frustrated] or [quietly, hesitant]
 
-WHAT MAKES CONVERSATION SOUND HUMAN — apply all of these:
+COMPLETE TAG LIBRARY — use ALL of these appropriately:
 
-1. FILLERS & DISFLUENCIES (6% of real speech per linguistics research)
-   "uh", "um", "I mean", "you know", "like", "well", "so", "right"
-   "It's— it's weird." / "I uh— yeah, okay, fair."
-   DO NOT write clean polished sentences. Real people don't speak in polished sentences.
+EMOTIONS:
+[excited] [frustrated] [nervous] [tired] [sad] [angry] [happy] [curious]
+[skeptical] [resigned] [surprised] [relieved] [annoyed] [flustered] [sarcastic]
+[deadpan] [passionate] [disgusted] [amused] [confused] [mischievously]
 
-2. INCOMPLETE THOUGHTS & RESTARTS
-   "The thing is— no wait, that's not what I mean."
-   "It's more like— okay, think of it this way."
-   "I was going to say— actually, you know what, never mind."
+DELIVERY / PACE:
+[fast-paced] [drawn out] [whispers] [shouts] [quietly] [emphatically]
+[hesitates] [stammers] [flatly] [dryly] [playfully] [cheerfully] [solemnly]
 
-3. REFERENCING WHAT WAS JUST SAID
-   If Alex said "five companies control everything" →
-   Sara says "[skeptical] 'Five companies.' Okay. Which five?"
-   People repeat the other person's exact words back constantly.
+REACTIONS / SOUNDS:
+[laughs] [chuckles] [sighs] [exhales sharply] [gasps] [gulps] [scoffs]
+[nervous laugh] [bitter laugh] [snorts] [tuts] [groans]
 
-4. BACKCHANNELS — short turns that show you're listening:
-   "Right." / "Yeah." / "Okay." / "Huh." / "Really?" / "Come on."
-   These are FULL TURNS, not additions to other turns.
+SITUATIONAL:
+[interrupting] [leaning in] [trailing off] [under breath] [as if realizing]
+[catching themselves] [building momentum] [losing steam] [holding back]
 
-5. TANGENTS & CIRCLES BACK
-   Someone goes off on a related story, then someone pulls it back:
-   "— wait, we're getting off topic."
-   "— but that's kind of the point though, right?"
+━━━ HOW EMOTIONS SHIFT MID-SENTENCE ━━━
+This is the KEY to sounding human. Tags shift within a single turn.
 
-6. SELF-CORRECTION & HEDGING
-   "Well— I don't know if that's exactly right, but—"
-   "That's— that's probably too strong a way to put it."
-   "Maybe I'm wrong about this but—"
+HEATED MOMENT (pace accelerates, emotions spike):
+"[fast-paced, frustrated] No— that's not— that's completely wrong. [emphatically] Five companies. FIVE. [quieter, catching themselves] You're telling me that's not consolidation?"
 
-AUDIO TAGS (use in EVERY turn, match to content):
-[laughs] [chuckles] [sighs] [exhales] [hesitant] [frustrated] [excited]
-[surprised] [interrupting] [skeptical] [thoughtful] [leaning in] [scoffs]
-[nervous laugh] [emphatic] [quietly] [dryly] [trailing off] [under breath]
+DEFLATION (energy drops mid-thought):
+"[excited] The Fed intervention worked, right? It prevented— [trailing off] I mean... [sighs, quietly] kind of. Sort of. [resigned] Not really."
 
-REAL CONVERSATION EXAMPLE — study every line:
-{"speaker":"Tom","text":"[leaning in] Alright. So, uh— Marx versus Keynes in 2025. Alex, who wins?"}
-{"speaker":"Alex","text":"[without hesitation] Marx. Not— I mean, not because he was right about everything, but—"}
-{"speaker":"Sara","text":"[interrupting] Oh come on."}
-{"speaker":"Alex","text":"[laughs] Let me— let me finish! He predicted consolidation. Like, five companies own 80% of digital ad spend. Five."}
-{"speaker":"Sara","text":"[sighs] They compete with each other though."}
-{"speaker":"Alex","text":"[emphatic] The commodity is you, Sara. Your attention. You can't— you can't shop around for a different version of yourself."}
-{"speaker":"Tom","text":"[surprised] Huh. That's... kind of dark actually."}
-{"speaker":"Sara","text":"[dryly] It is dark. But— okay, but Keynes would say the market corrects."}
-{"speaker":"Alex","text":"[skeptical] In 2008?"}
-{"speaker":"Sara","text":"[exhales] ...Fair point."}
-{"speaker":"Tom","text":"Do you two— do you agree on anything?"}
-{"speaker":"Sara","text":"[laughs softly] That it's a problem."}
-{"speaker":"Alex","text":"[thoughtful] Yeah. Yeah, it's definitely— [quietly] I don't know what you actually do about it."}
-{"speaker":"Tom","text":"[under breath] Nobody does."}
+REALIZATION MID-SENTENCE:
+"[skeptical] I don't think that's— [pause] [as if realizing] wait, actually. Actually that's exactly— [building momentum] that's EXACTLY what Marx predicted."
 
-NOTICE IN THE EXAMPLE:
-- Every turn starts with [audio tag]
-- Fillers: "uh", "I mean", "like", "actually", "yeah", "okay"
-- Incomplete thoughts: "Not— I mean, not because", "You can't— you can't"
-- Backchannel full turn: "In 2008?" / "Fair point." / "It is dark."
-- Self-correction: "Yeah. Yeah, it's definitely—"
-- Short punchy turns mixed with longer ones
+LAUGHTER THAT TURNS SERIOUS:
+"[laughs] Okay, okay, that's— [catching themselves] no but actually, that's— [solemnly] that's a genuinely terrifying point."
 
-PERSONALITY CONSISTENCY — each guest speaks differently:
-${participants.map((p, i) => `- ${p.name}: ${p.role}${p.focus ? '. ' + p.focus : ''}. Keep this voice consistent throughout.`).join('\n')}
+WHEN DEBATE GETS HEATED — these patterns appear in real interviews:
+- Pace accelerates: [fast-paced] tags, shorter sentences, more interruptions
+- People talk over each other more: more [interrupting] tags
+- Volume changes: mix [shouts] with [quieter] within same exchange
+- Frustration builds: [frustrated] → [emphatically] → [losing steam] arc
+- Then someone laughs to defuse: [nervous laugh] or [chuckles, deflecting]
 
-ARC across ${cfg.exchanges} exchanges:
-- First 10%: quick intros, positions established fast, tension emerges
-- 10-70%: real back-and-forth — challenges, specific examples, data, interruptions
-- 70-85%: something shifts — unexpected agreement or unanswerable question
-- 85-100%: honest landing — what does each person actually believe? Leave it unresolved.
+━━━ CONVERSATION STRUCTURE ━━━
+
+HOST OPENING (first 2-3 exchanges if host exists):
+${hostLine ? `The host (${hostLine.split(':')[1]?.trim().split('\n')[0] || 'host'}) opens with a warm, natural intro — not formal. Like:
+"[cheerfully] Alright, so— today we're getting into something that I think is genuinely fascinating. [leaning in] ${topic.slice(0,60)}. I've got [guests names] here and I— honestly I have no idea where this goes. [playfully] Let's find out."
+Then briefly introduces each guest naturally, not reading a CV.` : ''}
+
+MAIN CONVERSATION DYNAMICS:
+- Opening 10%: positions staked fast, tension emerges immediately
+- 10-50%: building heat — challenges, data, examples, pace accelerating  
+- 50-70%: peak tension — interruptions, [fast-paced] tags, emotional spikes
+- 70-85%: a shift — unexpected agreement OR an unanswerable question lands
+- 85-95%: honest landing — what does each person actually believe?
+${hostLine ? `- Last 2-3 exchanges: host wraps up naturally: "[thoughtfully] So here's what I'm taking away from this... [to guests] Quick final thought each of you?" Then genuine thank you, not formal.` : ''}
+
+REAL INTERVIEW PATTERNS (from Rogan, Fridman, debate transcripts):
+1. People reference exact words just said: "[skeptical] 'Five companies'— okay. Which five specifically?"
+2. Laughter appears at unexpected moments, often at serious points
+3. Someone admits uncertainty: "[hesitates] I... I don't know if that's right actually"
+4. Energy builds then someone deflates it: "[laughs, deflecting] okay okay I'm being too intense"
+5. Tangents feel natural: "— which reminds me of something completely unrelated but— [fast-paced] actually no it's totally related"
+6. Silences in text: "..." signals the voice to pause naturally
+
+FILLERS THAT MAKE SPEECH HUMAN (use constantly):
+"uh", "um", "I mean", "you know", "like", "well", "so", "right", "okay"
+"it's— it's weird", "I uh— yeah", "that's— that's not", "well I— no"
+
+EXAMPLE SHOWING EMOTIONAL ARC (study the tag progression):
+{"speaker":"Tom","text":"[cheerfully, leaning in] Alright. So— uh, Marx versus Keynes in 2025. Who wins?"}
+{"speaker":"Alex","text":"[without hesitation] Marx."}
+{"speaker":"Sara","text":"[scoffs] Oh come ON."}
+{"speaker":"Alex","text":"[laughs] Let me— [fast-paced] He predicted consolidation. Five companies own 80% of digital ad spend. Five."}
+{"speaker":"Sara","text":"[flatly] They compete with each other."}
+{"speaker":"Alex","text":"[emphatically] The commodity is YOU, Sara. [building momentum] Your attention, your data— [catching themselves, quieter] you can't shop around for a different version of yourself."}
+{"speaker":"Tom","text":"[surprised, quietly] Huh. That's... kind of dark."}
+{"speaker":"Sara","text":"[sighs] It is dark. But— [hesitates] Keynes would say the market corrects eventually."}
+{"speaker":"Alex","text":"[fast-paced, frustrated] In 2008?! The top 1%— [stops, exhales sharply] sorry. [resigned] Go on."}
+{"speaker":"Sara","text":"[nervous laugh] No, that's— that's fair. [trailing off] 2008 is... yeah."}
+{"speaker":"Tom","text":"[amused] Do you two agree on anything at all?"}
+{"speaker":"Sara","text":"[deadpan] That it's a problem."}
+{"speaker":"Alex","text":"[laughs, then quietly] Yeah. It's a problem. I just... [as if realizing] I genuinely don't know what you do about it."}
+{"speaker":"Tom","text":"[solemnly] Nobody does. [pause] That might be the most honest thing said today."}
 
 HARD RULES:
 - ALL text in ${langName}
-- EVERY turn starts with [audio tag]
-- Use fillers and disfluencies in EVERY turn
+- EVERY turn has at least one [tag], most have 2-3 with mid-sentence shifts
+- Fillers in every turn
 - Most turns under 30 words
-- ZERO "Great point", "Absolutely", "That's fascinating", "Indeed", "Certainly"
-- Specific: real names, real numbers, real companies, real events
-- NEVER mention being on a podcast or being an AI
+- ZERO "Great point", "Absolutely", "That's fascinating", "Indeed"
+- Real specifics: names, numbers, companies, events
+- NEVER mention being a podcast or AI
 
-Return ONLY valid JSON. Zero markdown. Start immediately with [:
-[{"speaker":"ExactName","text":"[tag] words with uh fillers and— incomplete thoughts"},...]`;
+Return ONLY valid JSON, zero markdown:
+[{"speaker":"ExactName","text":"[tag, tag] words uh— shifting [new tag] mid sentence"},...]`;
 }
 
 // ── Generate podcast ───────────────────────────────────
