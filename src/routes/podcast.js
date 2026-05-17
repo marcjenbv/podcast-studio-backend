@@ -286,47 +286,68 @@ router.post('/generate', requireAuth, async (req, res) => {
 
     if (allTurns.length < 5) throw new Error('Script too short — please try again');
 
-    // Build voiceMap: assign each unique speaker a distinct voice
+    // Build voiceMap: guarantee every speaker gets a UNIQUE voice
+    // Strategy: build a pool of all available voices in order, assign one per speaker
     const uniqueSpeakers = [...new Set(allTurns.map(t => t.speaker))];
-    const usedVoiceIds   = new Set();
     const voiceMap       = {};
 
-    // Pre-register host voice so guests never get the same one
+    // All available ElevenLabs voices in order
+    const ALL_VOICES = [
+      'pNInz6obpgDQGcFmaJgB', // Adam
+      'EXAVITQu4vr4xnSDxMaL', // Sarah
+      'TX3LPaxmHKxFdv7VOQHJ', // Liam
+      'XB0fDUnXU5powFXDhCwa', // Charlotte
+      'Xb7hH8MSUJpSbSDYk0k2', // Alice
+      'iP95p4xoKVk53GoZ742B', // Chris
+      'onwK4e9ZLuTAKqWW03F9', // Daniel
+      'XrExE9yKIg1WjnnlVkGX', // Matilda
+      'bIHbv24MWmeRgasZH58o', // Will
+      '9BWtsMINqrJLrRacOk9x', // Aria
+    ];
+
+    // Build ordered list of voices: host first, then participants, then fallbacks
+    const voicePool = [];
+
+    // Add host voice first if configured
     if (hostConfig?.name && hostConfig?.voiceId) {
-      usedVoiceIds.add(hostConfig.voiceId);
+      voicePool.push({ speakerHint: hostConfig.name.toLowerCase(), voiceId: hostConfig.voiceId });
     }
 
+    // Add participant voices
+    participants.forEach(p => {
+      if (!voicePool.find(v => v.voiceId === p.voiceId)) {
+        voicePool.push({ speakerHint: p.name.toLowerCase(), voiceId: p.voiceId });
+      }
+    });
+
+    // Fill remaining slots from ALL_VOICES pool
+    ALL_VOICES.forEach(vid => {
+      if (!voicePool.find(v => v.voiceId === vid)) {
+        voicePool.push({ speakerHint: null, voiceId: vid });
+      }
+    });
+
+    // Assign voices to speakers — try to match by name hint, then assign by position
+    const assignedVoices = new Set();
     uniqueSpeakers.forEach((speaker, i) => {
-      // Check if this is the host
-      if (hostConfig?.name) {
-        const hostLower    = hostConfig.name.toLowerCase();
-        const speakerLower = speaker.toLowerCase();
-        if (speakerLower === hostLower || speakerLower.startsWith(hostLower.split(' ')[0])) {
-          voiceMap[speaker] = hostConfig.voiceId;
-          usedVoiceIds.add(hostConfig.voiceId);
-          return;
-        }
-      }
+      const speakerLower = speaker.toLowerCase();
+      const firstName    = speakerLower.split(' ')[0];
 
-      // 1. Exact name match with participants
-      let p = participants.find(x => x.name === speaker);
-      // 2. Case-insensitive
-      if (!p) p = participants.find(x => x.name.toLowerCase() === speaker.toLowerCase());
-      // 3. First name match
-      if (!p) {
-        const fn = speaker.split(' ')[0].toLowerCase();
-        p = participants.find(x => x.name.toLowerCase().startsWith(fn));
-      }
-      // 4. Next participant whose voice hasn't been used yet
-      if (!p || usedVoiceIds.has(p.voiceId)) {
-        p = participants.find(x => !usedVoiceIds.has(x.voiceId));
-      }
-      // 5. Final fallback
-      if (!p) p = participants[i % participants.length];
+      // 1. Try to find a voice with a matching hint (host or participant name match)
+      let match = voicePool.find(v =>
+        !assignedVoices.has(v.voiceId) &&
+        v.speakerHint &&
+        (v.speakerHint === speakerLower || v.speakerHint.startsWith(firstName) || speakerLower.startsWith(v.speakerHint.split(' ')[0]))
+      );
 
-      const voiceId = p?.voiceId || participants[0]?.voiceId;
-      voiceMap[speaker] = voiceId;
-      usedVoiceIds.add(voiceId);
+      // 2. Fall back to next unassigned voice in pool
+      if (!match) match = voicePool.find(v => !assignedVoices.has(v.voiceId));
+
+      // 3. Final fallback — cycle (shouldn't happen with 10 voices)
+      if (!match) match = voicePool[i % voicePool.length];
+
+      voiceMap[speaker] = match.voiceId;
+      assignedVoices.add(match.voiceId);
     });
 
     // Save podcast first — if this fails, no minutes charged
