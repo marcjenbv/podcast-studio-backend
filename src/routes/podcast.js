@@ -73,34 +73,47 @@ function enhanceForSpeech(text) {
   return t;
 }
 
-async function synthesizeVoice(text, voiceId) {
-  const enhanced    = enhanceForSpeech(text);
-  const isQuestion  = text.trim().endsWith('?');
-  const isExclaim   = text.includes('!');
-  const isInterrupt = /^(Wait|No,|But |Actually|Hold on|Exactly|Right,|Come on|Look,|Okay)/i.test(text);
-  const isShort     = text.split(' ').length < 8;
+async function synthesizeVoice(text, voiceId, prevText = null, nextText = null, retries = 2) {
+  // Per ElevenLabs docs (2025):
+  // stability 0.40-0.50: emotional range without instability for conversation
+  // similarity_boost 0.75: documented sweet spot for clarity
+  // style 0: let the TEXT drive emotion via punctuation and word choice
+  //          (style > 0 causes over-acting and sounds theatrical, not natural)
+  // previous_text/next_text: CRITICAL for natural prosody — without this,
+  //   each turn sounds read in isolation. These parameters let ElevenLabs
+  //   know what came before/after so intonation flows naturally between speakers.
+  const body = {
+    text,
+    model_id: 'eleven_multilingual_v2',
+    voice_settings: {
+      stability:        0.45,
+      similarity_boost: 0.75,
+      style:            0,
+      use_speaker_boost: true,
+    },
+  };
+  if (prevText) body.previous_text = prevText;
+  if (nextText) body.next_text     = nextText;
 
-  // Lower stability = more natural variation in pitch and pace
-  // Higher style = more expressive, emotional delivery
-  const stability        = isInterrupt ? 0.12 : isQuestion ? 0.18 : isShort ? 0.15 : 0.22;
-  const style            = isExclaim   ? 0.85 : isQuestion ? 0.72 : isInterrupt ? 0.78 : 0.65;
-  const similarity_boost = 0.65;  // Lower = more natural, less clone-like
-
-  const res = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
-    method: 'POST',
-    headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'content-type': 'application/json' },
-    body: JSON.stringify({
-      text:     enhanced,
-      model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability, similarity_boost, style, use_speaker_boost: true },
-    }),
-  });
-  if (!res.ok) {
-    const e = await res.json().catch(() => ({}));
-    throw new Error(e.detail?.message || `ElevenLabs HTTP ${res.status}`);
+  try {
+    const res = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
+      method: 'POST',
+      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      throw new Error(e.detail?.message || `ElevenLabs HTTP ${res.status}`);
+    }
+    const buffer = await res.buffer();
+    return buffer.toString('base64');
+  } catch(e) {
+    if (retries > 0) {
+      await new Promise(r => setTimeout(r, 1000 * (3 - retries)));
+      return synthesizeVoice(text, voiceId, prevText, nextText, retries - 1);
+    }
+    throw e;
   }
-  const buffer = await res.buffer();
-  return buffer.toString('base64');
 }
 
 function buildScriptPrompt(topic, context, langCode, tone, participants, duration, hostConfig = null) {
@@ -249,7 +262,14 @@ router.post('/generate', requireAuth, async (req, res) => {
       usedVoiceIds.add(voiceId);
     });
 
-    // Deduct minutes
+    // Save podcast first — if this fails, no minutes charged
+    const { data: podcast } = await supabase.from('podcasts').insert({
+      user_id: req.user.id, topic, language, tone, duration,
+      participants: JSON.stringify(participants),
+      turns:        JSON.stringify(allTurns),
+    }).select('id').single();
+
+    // Deduct minutes — only after podcast successfully saved
     const plan = PLANS[req.user.subscription_plan];
     if (!plan) {
       const freeLeft = freeMinutesRemaining(req.user);
@@ -282,13 +302,6 @@ router.post('/generate', requireAuth, async (req, res) => {
       }
     }
 
-    // Save
-    const { data: podcast } = await supabase.from('podcasts').insert({
-      user_id: req.user.id, topic, language, tone, duration,
-      participants: JSON.stringify(participants),
-      turns:        JSON.stringify(allTurns),
-    }).select('id').single();
-
     res.json({ podcastId: podcast?.id, turns: allTurns, voiceMap });
 
   } catch(e) {
@@ -299,10 +312,10 @@ router.post('/generate', requireAuth, async (req, res) => {
 
 // ── Synthesize one turn ────────────────────────────────
 router.post('/synthesize', requireAuth, async (req, res) => {
-  const { text, voiceId } = req.body;
+  const { text, voiceId, prevText, nextText } = req.body;
   if (!text || !voiceId) return res.status(400).json({ error: 'text and voiceId required' });
   try {
-    const audio = await synthesizeVoice(text, voiceId);
+    const audio = await synthesizeVoice(text, voiceId, prevText||null, nextText||null);
     res.json({ audio });
   } catch(e) {
     console.error('TTS error:', e.message);
