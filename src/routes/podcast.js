@@ -109,6 +109,9 @@ function buildScriptPrompt(topic, context, langCode, tone, participants, duratio
   const guestList = participants.map(p =>
     `- ${p.name} (${p.role})${p.focus ? ' — angle: ' + p.focus : ''}`
   ).join('\n');
+  const hostLine = hostConfig && hostConfig.name
+    ? `Host (guides discussion, asks questions, does NOT debate): ${hostConfig.name}\n`
+    : '';
 
   return `Write a COMPLETE ${duration}-minute ${tone.toLowerCase()} podcast script in ${langName}.
 
