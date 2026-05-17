@@ -196,57 +196,75 @@ function buildScriptPrompt(topic, context, langCode, tone, participants, duratio
   return `Write a COMPLETE ${duration}-minute ${tone.toLowerCase()} podcast script in ${langName}.
 
 Topic: "${topic}"
-${context ? `Context the guests know:\n${context}\n` : ''}
+${context ? `Background the guests know:\n${context}\n` : ''}
 ${hostLine}Guests:
 ${guestList}
 
-Target: ${cfg.exchanges} exchanges total. Write ALL of them now — do not stop early.
+TARGET: ${cfg.exchanges} exchanges. Write ALL of them. Do not stop early.
 
-HOW REAL PODCASTS ACTUALLY SOUND — follow these patterns exactly:
+━━━ CRITICAL: YOU ARE WRITING FOR ELEVENLABS eleven_v3 TEXT-TO-DIALOGUE ━━━
 
-TURN LENGTH: Most turns are 1-2 sentences. Occasionally 3. Rarely more.
-Bad: "That's a fascinating point Sara. I think the key issue here is that when we look at the data from multiple sources including the McKinsey report from 2023, we can see that..."
-Good: "The McKinsey data is clear. 40% of jobs disrupted by 2035."
+The model renders [audio tags] as PERFORMANCE DIRECTIONS — not spoken words.
+Use them in every single turn. They make voices sound human, not robotic.
 
-INTERRUPTIONS — cut each other off constantly:
-"But the thing is—" / "The thing is it's already happening."
-"So you're saying—" / "I'm saying we're too late."
-"Hang on—" / "No, let me finish."
+AVAILABLE AUDIO TAGS (use these constantly):
+[laughs] [chuckles] [sighs] [exhales sharply] [hesitant] [frustrated] [excited]
+[surprised] [interrupting] [skeptical] [thoughtful] [leaning in] [trailing off]
+[under breath] [scoffs] [nervous laugh] [emphatic] [quietly] [dryly]
 
-REACTIONS — not formal transitions:
-"Wait, really?" / "Exactly." / "Come on." / "Okay but—" / "That's the point!" / "Prove it." / "When?" / "Which ones?" / "Seriously?"
+HOW REAL CONVERSATIONS SOUND — write exactly like this:
 
-RHYTHM EXAMPLE — notice the pace:
-Alex: "The EU AI Act changes everything."
-Sara: "For who?"
-Alex: "For companies over 50 employees."
-Sara: "That's basically everyone."
-James: "Not startups."
-Sara: "Startups scale. Then what?"
-Alex: "Then they comply or pay."
-James: "Or leave Europe."
-Sara: "Some will."
-Alex: "Most won't. The market's too big."
-James: "You sound very confident about that."
-Alex: "I am."
-Sara: "I'm not."
+PEOPLE DON'T FINISH THOUGHTS CLEANLY:
+Bad:  "The algorithmic amplification creates problematic filter bubbles."
+Good: "[sighs] It's the algorithm. It just… keeps showing you the same thing."
+
+INTERRUPTIONS — use a dash when someone gets cut off:
+"But if you look at the data from—"
+"[interrupting] The data is wrong."
+
+SHORT REACTIVE TURNS are normal and common:
+"[skeptical] Right." / "[laughs] Okay." / "[frustrated] No." / "[surprised] Wait, what?"
+
+PEOPLE THINK OUT LOUD:
+"[hesitant] I mean… yeah, maybe." / "[thoughtful] It's— I don't know, it's complicated."
+
+EXAMPLE OF EXACTLY HOW TO WRITE THIS (copy this style):
+{"speaker":"Tom","text":"[leaning in] Okay. Marx versus Keynes in 2025. Alex — who wins?"}
+{"speaker":"Alex","text":"[without hesitation] Marx. Not because he was right, but—"}
+{"speaker":"Sara","text":"[interrupting] Oh come ON."}
+{"speaker":"Alex","text":"[laughs] Let me finish! He predicted consolidation. Five companies own 80% of ad spend."}
+{"speaker":"Sara","text":"[sighs] They compete with each other."}
+{"speaker":"Alex","text":"The commodity is you, Sara. Your attention. You can't shop for a different version of yourself."}
+{"speaker":"Tom","text":"[surprised] That's… kind of dark actually."}
+{"speaker":"Sara","text":"[laughs softly] It is. But Keynes would say—"}
+{"speaker":"Alex","text":"[skeptical] In 2008?"}
+{"speaker":"Sara","text":"[exhales] ...Fair point."}
+{"speaker":"Tom","text":"Do you two agree on anything?"}
+{"speaker":"Sara","text":"[dryly] That it's a problem."}
+{"speaker":"Alex","text":"[trailing off] Yeah. It's a problem. I just… [quietly] I don't know what you do about it."}
+
+PUNCTUATION RULES for natural rhythm:
+- Ellipsis (…) = hesitation, trailing off: "I mean… maybe."
+- Em dash (—) = interruption or sudden change: "But the thing is—" / "—which is why it failed."
+- Short sentence = punchy, reactive. Long = building an argument.
 
 CONVERSATION ARC across ${cfg.exchanges} exchanges:
-- Exchanges 1-${Math.round(cfg.exchanges*0.15)}: Fast intros, each guest stakes their position in 2-3 turns
-- Exchanges ${Math.round(cfg.exchanges*0.15)}-${Math.round(cfg.exchanges*0.7)}: The real fight — specific claims, direct challenges, real examples, data, stories
-- Exchanges ${Math.round(cfg.exchanges*0.7)}-${Math.round(cfg.exchanges*0.85)}: An unexpected moment — agreement on something surprising, or a question nobody can answer
-- Exchanges ${Math.round(cfg.exchanges*0.85)}-${cfg.exchanges}: Landing — what do they each actually believe? Leave some things unresolved.
+- First 10%: fast intros, each person stakes position, tension appears immediately  
+- 10-70%: back and forth — direct challenges, specific examples, data, interruptions, reactions
+- 70-85%: something shifts — unexpected agreement, or a question nobody can answer
+- 85-100%: honest landing — what does each person actually believe? Leave tension unresolved.
 
 ABSOLUTE RULES:
 - ALL text in ${langName}
-- NEVER "Great point!", "Absolutely!", "That's fascinating!", "Indeed"
-- NEVER reference being on a podcast or being an AI
-- Guests use each other's names sometimes, not always
-- Be specific: cite real examples, real numbers, real places, real names
-- Each guest has a consistent personality throughout
+- EVERY turn must start with an [audio tag]
+- Most turns under 25 words
+- NEVER "Great point", "Absolutely", "That's fascinating", "Indeed"
+- Be specific: real names, real numbers, real events, real companies
+- Each guest keeps a consistent personality throughout
+- Never mention being on a podcast or being an AI
 
 Return ONLY valid JSON array, zero markdown, zero explanation:
-[{"speaker":"Name","text":"words"},...]`;
+[{"speaker":"ExactGuestName","text":"[tag] words spoken"},...]`;
 }
 
 // ── Generate podcast ───────────────────────────────────
