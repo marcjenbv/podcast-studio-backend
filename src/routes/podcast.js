@@ -5,7 +5,8 @@ const supabase    = require('../supabase');
 const { canGeneratePodcast, freeMinutesRemaining, PLANS, FREE_MINUTES } = require('../plans');
 
 const ANTHROPIC_URL  = 'https://api.anthropic.com/v1/messages';
-const ELEVENLABS_URL = 'https://api.elevenlabs.io/v1/text-to-speech';
+const ELEVENLABS_TTS_URL      = 'https://api.elevenlabs.io/v1/text-to-speech';
+const ELEVENLABS_DIALOGUE_URL = 'https://api.elevenlabs.io/v1/text-to-dialogue';
 
 const DURATION_CFG = {
   5:  { exchanges: 30,  maxTokens: 4000  },
@@ -73,6 +74,64 @@ function enhanceForSpeech(text) {
   return t;
 }
 
+// ── Text-to-Dialogue: synthesize a chunk of turns as one audio file ──
+// This uses ElevenLabs v3 Dialogue API which generates natural multi-speaker
+// audio in a single call — proper transitions, overlaps, natural flow.
+// Max 2000 chars total text per request — we chunk accordingly.
+async function synthesizeDialogueChunk(inputs, retries = 3) {
+  // Add emotion tags to text based on content
+  const enhancedInputs = inputs.map(inp => ({
+    voice_id: inp.voice_id,
+    text: addEmotionTags(inp.text),
+  }));
+
+  try {
+    const res = await fetch(ELEVENLABS_DIALOGUE_URL, {
+      method: 'POST',
+      headers: {
+        'xi-api-key':   process.env.ELEVENLABS_API_KEY,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        inputs:   enhancedInputs,
+        model_id: 'eleven_v3',
+      }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({}));
+      const msg = e.detail?.message || e.detail?.status || `ElevenLabs HTTP ${res.status}`;
+      if (res.status === 429) throw new Error(`429 rate_limit: ${msg}`);
+      throw new Error(msg);
+    }
+    const buffer = await res.buffer();
+    return buffer.toString('base64');
+  } catch(e) {
+    if (retries > 0) {
+      const is429 = e.message?.includes('429');
+      const delay = is429 ? 8000 : 2000;
+      await new Promise(r => setTimeout(r, delay));
+      return synthesizeDialogueChunk(inputs, retries - 1);
+    }
+    throw e;
+  }
+}
+
+// Add natural emotion tags based on text content
+function addEmotionTags(text) {
+  let t = text.trim();
+  // Interruptions — cut-off marker
+  if (t.endsWith('—') || t.endsWith('-')) {
+    t = t; // already has interruption marker
+  }
+  // Laughter cues
+  if (/(ha|haha|hah)/i.test(t)) t = '[laughs] ' + t;
+  // Sighs
+  if (/(I (don't|dont) know|whatever|anyway)/i.test(t) && t.split(' ').length < 8) {
+    t = '[sighs] ' + t;
+  }
+  return t;
+}
+
 async function synthesizeVoice(text, voiceId, prevText = null, nextText = null, retries = 2) {
   // Per ElevenLabs docs (2025):
   // stability 0.40-0.50: emotional range without instability for conversation
@@ -96,7 +155,7 @@ async function synthesizeVoice(text, voiceId, prevText = null, nextText = null, 
   if (nextText) body.next_text     = nextText;
 
   try {
-    const res = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
+    const res = await fetch(`${ELEVENLABS_TTS_URL}/${voiceId}`, {
       method: 'POST',
       headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'content-type': 'application/json' },
       body: JSON.stringify(body),
@@ -314,6 +373,22 @@ router.post('/generate', requireAuth, async (req, res) => {
 });
 
 // ── Synthesize one turn ────────────────────────────────
+// ── Synthesize a chunk of dialogue turns (multi-speaker, one audio file) ──
+router.post('/synthesize-dialogue', requireAuth, async (req, res) => {
+  const { inputs } = req.body; // [{text, voice_id}]
+  if (!inputs || !Array.isArray(inputs) || inputs.length === 0) {
+    return res.status(400).json({ error: 'inputs array required' });
+  }
+  try {
+    const audio = await synthesizeDialogueChunk(inputs);
+    res.json({ audio });
+  } catch(e) {
+    console.error('Dialogue TTS error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Keep single-turn synthesize for fallback ─────────
 router.post('/synthesize', requireAuth, async (req, res) => {
   const { text, voiceId, prevText, nextText } = req.body;
   if (!text || !voiceId) return res.status(400).json({ error: 'text and voiceId required' });
