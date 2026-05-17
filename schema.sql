@@ -43,6 +43,10 @@ create table if not exists topup_purchases (
   created_at               timestamptz default now()
 );
 
+alter table podcasts add column if not exists series_title   text default null;
+alter table podcasts add column if not exists series_id      text default null;
+alter table podcasts add column if not exists episode_number int  default null;
+
 create index if not exists podcasts_user_id_idx      on podcasts(user_id);
 create index if not exists users_email_idx           on users(email);
 create index if not exists users_stripe_customer_idx on users(stripe_customer_id);

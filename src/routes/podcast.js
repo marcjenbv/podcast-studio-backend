@@ -304,6 +304,109 @@ Return ONLY valid JSON, zero markdown:
 [{"speaker":"ExactName","text":"[tag, tag] words uh— shifting [new tag] mid sentence"},...]`;
 }
 
+// ── Build series episode prompt ───────────────────────
+function buildSeriesEpisodePrompt(topic, context, langCode, tone, participants, duration, hostConfig, seriesMeta) {
+  const { totalEpisodes, episodeNumber, seriesTitle, seriesArc, prevSummary, nextEpisodeHint } = seriesMeta;
+  const langName  = LANG_NAMES[langCode] || 'English';
+  const cfg       = DURATION_CFG[duration] || DURATION_CFG[15];
+  const guestList = participants.map(p =>
+    `- ${p.name} (${p.role})${p.focus ? ' — angle: ' + p.focus : ''}`
+  ).join('
+');
+  const hostLine  = hostConfig && hostConfig.name
+    ? `Host (guides discussion, does NOT debate): ${hostConfig.name}
+`
+    : '';
+
+  return `Write Episode ${episodeNumber} of ${totalEpisodes} of a podcast series titled "${seriesTitle}" in ${langName}.
+
+SERIES OVERVIEW:
+${seriesArc}
+
+THIS EPISODE: Episode ${episodeNumber} — ${topic}
+${context ? `Source material for this episode:\n${context}\n` : ''}
+${hostLine}Guests:
+${guestList}
+
+${prevSummary ? `PREVIOUS EPISODE RECAP (Episode ${episodeNumber - 1}):\n${prevSummary}\nThe host MUST briefly reference this at the start to connect the series.` : ''}
+
+${nextEpisodeHint ? `NEXT EPISODE PREVIEW: The series will move on to: ${nextEpisodeHint}\nThe host MUST tease this at the end.` : ''}
+
+TARGET: ${cfg.exchanges} exchanges. Write ALL of them.
+
+SERIES EPISODE STRUCTURE:
+${episodeNumber === 1 ? `SERIES OPENER: Host introduces the entire series concept first (2-3 exchanges), then this episode's topic. Set up what the whole series will explore.` : episodeNumber === totalEpisodes ? `SERIES FINALE: This is the last episode. Host should bring together threads from the whole series. End with a reflection on the full journey.` : `MID-SERIES: Open by briefly referencing where we left off. End by hinting at the next episode.`}
+
+━━━ ELEVENLABS ELEVEN_V3 AUDIO DIRECTION ━━━
+[tags] = PERFORMANCE DIRECTIONS. Use layered tags for emotional arcs.
+
+FULL TAG LIBRARY:
+[excited] [frustrated] [nervous] [tired] [sad] [angry] [curious] [skeptical]
+[resigned] [surprised] [relieved] [annoyed] [flustered] [sarcastic] [deadpan]
+[passionate] [amused] [confused] [fast-paced] [drawn out] [whispers] [emphatically]
+[hesitates] [stammers] [flatly] [dryly] [playfully] [laughs] [chuckles] [sighs]
+[exhales sharply] [gasps] [scoffs] [nervous laugh] [interrupting] [leaning in]
+[trailing off] [under breath] [as if realizing] [building momentum] [catching themselves]
+
+EMOTIONAL ARCS — shift tags MID-SENTENCE:
+"[fast-paced, frustrated] No— that's not— [emphatically] completely wrong. [catching themselves, quieter] Sorry. Go on."
+"[excited] This is— wait. [as if realizing] This is exactly what happened in episode ${episodeNumber - 1 || 1}."
+
+CONVERSATION DYNAMICS:
+- Fillers in every turn: "uh", "I mean", "you know", "like", "well"
+- Incomplete thoughts: "It's— it's complicated", "The thing is—"
+- Short reactive turns: "[scoffs] Right." / "[sighs] Yeah." / "[surprised] Wait, what?"
+- Every turn starts with at least one [audio tag]
+- Most turns under 30 words
+
+RULES:
+- ALL text in ${langName}
+- NEVER "Great point", "Absolutely", "That's fascinating"
+- Real specifics: names, dates, places, events from the source material
+- Each guest keeps consistent personality across ALL episodes in the series
+
+Return ONLY valid JSON:
+[{"speaker":"ExactName","text":"[tag] words"},...]`;
+}
+
+// ── Generate series plan ───────────────────────────────
+async function generateSeriesPlan(topic, context, totalEpisodes, tone, langCode) {
+  const langName = LANG_NAMES[langCode] || 'English';
+  const prompt = `You are planning a ${totalEpisodes}-episode podcast series on: "${topic}"
+${context ? `Source material:\n${context}\n` : ''}
+Tone: ${tone}
+Language: ${langName}
+
+Create a compelling series arc — like a TV series or documentary, not random episodes.
+Each episode should build on the previous. There should be a clear narrative journey.
+
+Return ONLY valid JSON:
+{
+  "seriesTitle": "compelling series title",
+  "seriesLogline": "one sentence describing the whole series arc",
+  "seriesArc": "2-3 sentences describing the narrative journey across all episodes",
+  "episodes": [
+    {
+      "episodeNumber": 1,
+      "title": "episode title",
+      "focus": "what this episode specifically covers",
+      "keyTension": "the central question or conflict this episode explores",
+      "endsOn": "what cliffhanger or thought this episode ends on"
+    }
+  ]
+}`;
+
+  const raw = await callAnthropic(
+    'You are a podcast series producer. Return only valid JSON.',
+    [{ role:'user', content: prompt }],
+    2000
+  );
+  const clean = raw.replace(/```json|```/g,'').trim();
+  const start = clean.indexOf('{');
+  const end   = clean.lastIndexOf('}');
+  return JSON.parse(clean.slice(start, end+1));
+}
+
 // ── Generate podcast ───────────────────────────────────
 router.post('/generate', requireAuth, async (req, res) => {
   const { topic, context, language, tone, duration, participants, hostConfig } = req.body;
@@ -479,6 +582,112 @@ router.post('/synthesize', requireAuth, async (req, res) => {
     res.json({ audio });
   } catch(e) {
     console.error('TTS error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Plan a series (returns episode outline, no audio) ──
+router.post('/plan-series', requireAuth, async (req, res) => {
+  const { topic, context, totalEpisodes, tone, language } = req.body;
+  if (!topic || !totalEpisodes) return res.status(400).json({ error: 'topic and totalEpisodes required' });
+  try {
+    const plan = await generateSeriesPlan(topic, context, totalEpisodes, tone || 'Debate', language || 'en');
+    res.json({ plan });
+  } catch(e) {
+    console.error('Series plan error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Generate one episode of a series ───────────────────
+router.post('/generate-episode', requireAuth, async (req, res) => {
+  const { topic, context, language, tone, duration, participants, hostConfig, seriesMeta } = req.body;
+  if (!topic || !participants || participants.length < 2) {
+    return res.status(400).json({ error: 'topic and at least 2 participants required' });
+  }
+
+  const check = canGeneratePodcast(req.user, duration);
+  if (!check.allowed) {
+    if (check.reason === 'free_tier_exhausted')  return res.status(403).json({ error: 'free_tier_exhausted' });
+    if (check.reason === 'insufficient_minutes') return res.status(403).json({ error: 'insufficient_minutes', remaining: check.remaining });
+    return res.status(403).json({ error: 'subscription_required' });
+  }
+
+  try {
+    const prompt = buildSeriesEpisodePrompt(topic, context, language, tone, participants, duration, hostConfig, seriesMeta);
+    const cfg    = DURATION_CFG[duration] || DURATION_CFG[15];
+    const raw    = await callAnthropic(
+      'You are a professional podcast scriptwriter for a multi-episode series.',
+      [{ role:'user', content: prompt }],
+      cfg.maxTokens
+    );
+
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const start = clean.indexOf('[');
+    const end   = clean.lastIndexOf(']');
+    if (start === -1) throw new Error('No script returned');
+
+    let allTurns = JSON.parse(clean.slice(start, end+1));
+    allTurns = allTurns.filter(t => t.speaker && t.text?.trim()).map(t => ({ speaker: t.speaker.trim(), text: t.text.trim() }));
+    if (allTurns.length < 5) throw new Error('Script too short — please try again');
+
+    // Build voiceMap
+    const uniqueSpeakers = [...new Set(allTurns.map(t => t.speaker))];
+    const ALL_VOICES = ['pNInz6obpgDQGcFmaJgB','EXAVITQu4vr4xnSDxMaL','TX3LPaxmHKxFdv7VOQHJ','XB0fDUnXU5powFXDhCwa','Xb7hH8MSUJpSbSDYk0k2','iP95p4xoKVk53GoZ742B','onwK4e9ZLuTAKqWW03F9','XrExE9yKIg1WjnnlVkGX','bIHbv24MWmeRgasZH58o','9BWtsMINqrJLrRacOk9x'];
+    const voicePool = [];
+    if (hostConfig?.name && hostConfig?.voiceId) voicePool.push({ speakerHint: hostConfig.name.toLowerCase(), voiceId: hostConfig.voiceId });
+    participants.forEach(p => { if (!voicePool.find(v => v.voiceId === p.voiceId)) voicePool.push({ speakerHint: p.name.toLowerCase(), voiceId: p.voiceId }); });
+    ALL_VOICES.forEach(vid => { if (!voicePool.find(v => v.voiceId === vid)) voicePool.push({ speakerHint: null, voiceId: vid }); });
+    const assignedVoices = new Set();
+    const voiceMap = {};
+    uniqueSpeakers.forEach((speaker, i) => {
+      const sl = speaker.toLowerCase();
+      const fn = sl.split(' ')[0];
+      let match = voicePool.find(v => !assignedVoices.has(v.voiceId) && v.speakerHint && (v.speakerHint === sl || v.speakerHint.startsWith(fn) || sl.startsWith(v.speakerHint.split(' ')[0])));
+      if (!match) match = voicePool.find(v => !assignedVoices.has(v.voiceId));
+      if (!match) match = voicePool[i % voicePool.length];
+      voiceMap[speaker] = match.voiceId;
+      assignedVoices.add(match.voiceId);
+    });
+
+    // Save episode
+    const { data: podcast } = await supabase.from('podcasts').insert({
+      user_id: req.user.id, topic, language, tone, duration,
+      participants: JSON.stringify(participants),
+      turns: JSON.stringify(allTurns),
+      series_title:   seriesMeta?.seriesTitle || null,
+      series_id:      seriesMeta?.seriesId    || null,
+      episode_number: seriesMeta?.episodeNumber || null,
+    }).select('id').single();
+
+    // Deduct minutes after successful save
+    const plan = PLANS[req.user.subscription_plan];
+    if (!plan) {
+      const freeLeft = freeMinutesRemaining(req.user);
+      if (freeLeft >= duration) {
+        await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0)+duration }).eq('id',req.user.id);
+      } else {
+        await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0)+freeLeft, minutes_topup: Math.max(0,(req.user.minutes_topup||0)-(duration-freeLeft)) }).eq('id',req.user.id);
+      }
+    } else {
+      const periodStart = new Date(req.user.period_start);
+      const now = new Date();
+      const monthsElapsed = (now.getFullYear()-periodStart.getFullYear())*12+(now.getMonth()-periodStart.getMonth());
+      if (monthsElapsed > 0) {
+        await supabase.from('users').update({ minutes_used: duration, period_start: now.toISOString() }).eq('id',req.user.id);
+      } else {
+        const planRemaining = Math.max(0, plan.minutesPerPeriod - (req.user.minutes_used||0));
+        if (duration <= planRemaining) {
+          await supabase.from('users').update({ minutes_used: (req.user.minutes_used||0)+duration }).eq('id',req.user.id);
+        } else {
+          await supabase.from('users').update({ minutes_used: plan.minutesPerPeriod, minutes_topup: Math.max(0,(req.user.minutes_topup||0)-(duration-planRemaining)) }).eq('id',req.user.id);
+        }
+      }
+    }
+
+    res.json({ podcastId: podcast?.id, turns: allTurns, voiceMap });
+  } catch(e) {
+    console.error('Episode generation error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
