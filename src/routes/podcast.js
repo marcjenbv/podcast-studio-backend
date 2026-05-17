@@ -103,7 +103,10 @@ async function synthesizeVoice(text, voiceId, prevText = null, nextText = null, 
     });
     if (!res.ok) {
       const e = await res.json().catch(() => ({}));
-      throw new Error(e.detail?.message || `ElevenLabs HTTP ${res.status}`);
+      const msg = e.detail?.message || e.detail?.status || `ElevenLabs HTTP ${res.status}`;
+      // Make 429 clearly identifiable so frontend can apply longer backoff
+      if (res.status === 429) throw new Error(`429 rate_limit: ${msg}`);
+      throw new Error(msg);
     }
     const buffer = await res.buffer();
     return buffer.toString('base64');
