@@ -46,20 +46,53 @@ async function callAnthropic(system, messages, maxTokens) {
   return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
 }
 
+// ── Enhance text with natural speech markers before TTS ──
+function enhanceForSpeech(text) {
+  let t = text.trim();
+
+  // Add breath pauses at natural points
+  t = t.replace(/, /g, ',  ');                          // comma = short pause
+  t = t.replace(/\. /g, '.  ');                         // period = longer pause
+  t = t.replace(/— /g, '—  ');                          // dash = dramatic pause
+  t = t.replace(/\.\.\./g, '...');                      // ellipsis = trailing off
+
+  // Interruption starters — make them punchy with a beat before continuing
+  t = t.replace(/^(Wait[,—]?)\s*/i,   '$1  ');
+  t = t.replace(/^(No[,—]?)\s*/i,     '$1  ');
+  t = t.replace(/^(But[,—]?)\s*/i,    '$1  ');
+  t = t.replace(/^(Okay[,—]?)\s*/i,   '$1  ');
+  t = t.replace(/^(Look[,—]?)\s*/i,   '$1  ');
+  t = t.replace(/^(Right[,—]?)\s*/i,  '$1  ');
+  t = t.replace(/^(Come on[,—]?)\s*/i,'$1  ');
+  t = t.replace(/^(Exactly[,—]?)\s*/i,'$1  ');
+
+  // Emphasis on key words — wrap numbers and strong claims
+  t = t.replace(/(\d+%)/g, '$1');                       // percentages stay as-is (EL emphasises naturally)
+  t = t.replace(/(never|always|everyone|nobody|impossible|wrong|completely|absolutely)/gi, '$1');
+
+  return t;
+}
+
 async function synthesizeVoice(text, voiceId) {
+  const enhanced    = enhanceForSpeech(text);
   const isQuestion  = text.trim().endsWith('?');
   const isExclaim   = text.includes('!');
-  const isInterrupt = /^(Wait|No,|But |Actually|Hold on|Exactly|Right,|Come on|Okay but|Look,)/i.test(text);
-  const stability   = isInterrupt ? 0.22 : isQuestion ? 0.28 : 0.32;
-  const style       = isExclaim ? 0.75 : isQuestion ? 0.65 : isInterrupt ? 0.70 : 0.55;
+  const isInterrupt = /^(Wait|No,|But |Actually|Hold on|Exactly|Right,|Come on|Look,|Okay)/i.test(text);
+  const isShort     = text.split(' ').length < 8;
+
+  // Lower stability = more natural variation in pitch and pace
+  // Higher style = more expressive, emotional delivery
+  const stability        = isInterrupt ? 0.12 : isQuestion ? 0.18 : isShort ? 0.15 : 0.22;
+  const style            = isExclaim   ? 0.85 : isQuestion ? 0.72 : isInterrupt ? 0.78 : 0.65;
+  const similarity_boost = 0.65;  // Lower = more natural, less clone-like
 
   const res = await fetch(`${ELEVENLABS_URL}/${voiceId}`, {
     method: 'POST',
     headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'content-type': 'application/json' },
     body: JSON.stringify({
-      text,
+      text:     enhanced,
       model_id: 'eleven_multilingual_v2',
-      voice_settings: { stability, similarity_boost: 0.75, style, use_speaker_boost: true },
+      voice_settings: { stability, similarity_boost, style, use_speaker_boost: true },
     }),
   });
   if (!res.ok) {
@@ -170,20 +203,31 @@ router.post('/generate', requireAuth, async (req, res) => {
 
     if (allTurns.length < 5) throw new Error('Script too short — please try again');
 
-    // Build a speaker->voiceId map so the frontend knows which voice to use
-    // Match by position if names differ slightly
+    // Build voiceMap: assign each unique speaker a distinct voice
+    // Strategy: try name match first, then assign by order of first appearance
+    // This guarantees no two speakers share a voice
     const uniqueSpeakers = [...new Set(allTurns.map(t => t.speaker))];
-    const voiceMap = {};
+    const usedVoiceIds   = new Set();
+    const voiceMap       = {};
+
     uniqueSpeakers.forEach((speaker, i) => {
-      // Try exact match first
+      // 1. Exact name match
       let p = participants.find(x => x.name === speaker);
-      // Try case-insensitive
+      // 2. Case-insensitive
       if (!p) p = participants.find(x => x.name.toLowerCase() === speaker.toLowerCase());
-      // Try first name
-      if (!p) p = participants.find(x => x.name.toLowerCase().startsWith(speaker.split(' ')[0].toLowerCase()));
-      // Fall back to position
+      // 3. First name match
+      if (!p) {
+        const fn = speaker.split(' ')[0].toLowerCase();
+        p = participants.find(x => x.name.toLowerCase().startsWith(fn));
+      }
+      // 4. Pick next participant whose voice hasn't been used
+      if (!p) p = participants.find(x => !usedVoiceIds.has(x.voiceId));
+      // 5. Final fallback — cycle through participants
       if (!p) p = participants[i % participants.length];
-      voiceMap[speaker] = p?.voiceId || participants[0]?.voiceId;
+
+      const voiceId = p?.voiceId || participants[0]?.voiceId;
+      voiceMap[speaker] = voiceId;
+      usedVoiceIds.add(voiceId);
     });
 
     // Deduct minutes
