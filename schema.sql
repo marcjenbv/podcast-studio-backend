@@ -51,6 +51,20 @@ create index if not exists podcasts_user_id_idx      on podcasts(user_id);
 create index if not exists users_email_idx           on users(email);
 create index if not exists users_stripe_customer_idx on users(stripe_customer_id);
 
+-- User cloned voices
+create table if not exists user_voices (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid references users(id) on delete cascade,
+  voice_id    text not null,
+  name        text not null,
+  description text default '',
+  created_at  timestamptz default now()
+);
+
+-- Edit tracking on podcasts
+alter table podcasts add column if not exists edit_count int not null default 0;
+
+alter table user_voices      disable row level security;
 alter table users            disable row level security;
 alter table podcasts         disable row level security;
 alter table topup_purchases  disable row level security;

@@ -705,6 +705,137 @@ router.get('/voice-preview/:voiceId', async (req, res) => {
   }
 });
 
+// ── Voice cloning: create instant voice clone ────────
+router.post('/clone-voice', requireAuth, async (req, res) => {
+  // Expects multipart form data with audio file(s) and voice name
+  const fetch2 = require('node-fetch');
+  const FormData = require('form-data');
+
+  const { name, description } = req.body;
+  const audioData = req.body.audioBase64; // base64 encoded audio
+  const audioName = req.body.audioName || 'sample.mp3';
+
+  if (!name || !audioData) return res.status(400).json({ error: 'name and audioBase64 required' });
+
+  try {
+    const form = new FormData();
+    form.append('name', name);
+    form.append('description', description || `Custom voice for ${req.user.email}`);
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(audioData, 'base64');
+    form.append('files', audioBuffer, { filename: audioName, contentType: 'audio/mpeg' });
+    form.append('remove_background_noise', 'true');
+
+    const r = await fetch2('https://api.elevenlabs.io/v1/voices/add', {
+      method: 'POST',
+      headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, ...form.getHeaders() },
+      body: form,
+    });
+
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      return res.status(r.status).json({ error: e.detail?.message || `ElevenLabs error ${r.status}` });
+    }
+
+    const data = await r.json();
+    // Save voice to user's profile
+    await supabase.from('user_voices').insert({
+      user_id:  req.user.id,
+      voice_id: data.voice_id,
+      name,
+      description: description || '',
+    });
+
+    res.json({ voiceId: data.voice_id, name });
+  } catch(e) {
+    console.error('Voice clone error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── Get user's cloned voices ──────────────────────────
+router.get('/my-voices', requireAuth, async (req, res) => {
+  const { data } = await supabase.from('user_voices')
+    .select('voice_id, name, description, created_at')
+    .eq('user_id', req.user.id)
+    .order('created_at', { ascending: false });
+  res.json({ voices: data || [] });
+});
+
+// ── Edit a turn: regenerate single turn audio ────────
+router.post('/edit-turn', requireAuth, async (req, res) => {
+  const { podcastId, turnIndex, newText, voiceId } = req.body;
+  if (!podcastId || turnIndex === undefined || !newText || !voiceId) {
+    return res.status(400).json({ error: 'podcastId, turnIndex, newText, voiceId required' });
+  }
+
+  try {
+    // Get the podcast
+    const { data: podcast } = await supabase.from('podcasts')
+      .select('turns, edit_count, user_id')
+      .eq('id', podcastId)
+      .eq('user_id', req.user.id)
+      .single();
+
+    if (!podcast) return res.status(404).json({ error: 'Podcast not found' });
+
+    const editCount   = podcast.edit_count || 0;
+    const FREE_EDITS  = 5; // first 5 edits per month are free
+    const EDIT_COST   = 1; // 1 minute per edit after free quota
+
+    // Check if user has minutes for paid edit
+    if (editCount >= FREE_EDITS) {
+      const check = canGeneratePodcast(req.user, EDIT_COST);
+      if (!check.allowed) {
+        return res.status(403).json({
+          error:      'insufficient_minutes',
+          remaining:  check.remaining || 0,
+          editCount,
+          freeEdits:  FREE_EDITS,
+          message:    `You've used your ${FREE_EDITS} free edits. This edit costs 1 minute from your plan.`,
+        });
+      }
+    }
+
+    // Synthesize the new turn
+    const audio = await synthesizeVoice(newText, voiceId);
+
+    // Update the podcast turns
+    const turns = JSON.parse(podcast.turns || '[]');
+    if (turns[turnIndex]) turns[turnIndex] = { ...turns[turnIndex], text: newText };
+
+    await supabase.from('podcasts').update({
+      turns:      JSON.stringify(turns),
+      edit_count: editCount + 1,
+    }).eq('id', podcastId);
+
+    // Deduct minute if past free quota
+    if (editCount >= FREE_EDITS) {
+      const plan = PLANS[req.user.subscription_plan];
+      if (!plan) {
+        const freeLeft = freeMinutesRemaining(req.user);
+        if (freeLeft >= EDIT_COST) {
+          await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0)+EDIT_COST }).eq('id',req.user.id);
+        } else {
+          await supabase.from('users').update({ minutes_topup: Math.max(0,(req.user.minutes_topup||0)-EDIT_COST) }).eq('id',req.user.id);
+        }
+      } else {
+        await supabase.from('users').update({ minutes_used: (req.user.minutes_used||0)+EDIT_COST }).eq('id',req.user.id);
+      }
+    }
+
+    res.json({
+      audio,           // base64 audio for this turn
+      editCount:  editCount + 1,
+      freeEdits:  FREE_EDITS,
+      wasFreeEdit: editCount < FREE_EDITS,
+    });
+  } catch(e) {
+    console.error('Edit turn error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── History ────────────────────────────────────────────
 router.get('/history', requireAuth, async (req, res) => {
   const { data, error } = await supabase.from('podcasts')
