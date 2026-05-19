@@ -697,10 +697,13 @@ router.get('/voice-preview/:voiceId', async (req, res) => {
   try {
     const r = await fetch(url);
     if (!r.ok) return res.status(404).json({ error: 'Preview not found' });
+    const buffer = Buffer.from(await r.arrayBuffer());
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    r.body.pipe(res);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(buffer);
   } catch(e) {
+    console.error('Voice preview error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
