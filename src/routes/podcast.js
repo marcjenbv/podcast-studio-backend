@@ -839,6 +839,72 @@ router.post('/edit-turn', requireAuth, async (req, res) => {
   }
 });
 
+// ── RSS Feed — generates a valid podcast RSS feed ────
+router.get('/rss/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { data: user } = await supabase.from('users').select('email').eq('id', userId).single();
+  if (!user) return res.status(404).send('User not found');
+
+  const { data: podcasts } = await supabase.from('podcasts')
+    .select('id, topic, language, tone, duration, created_at, series_title, episode_number')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+
+  const baseUrl  = process.env.FRONTEND_URL || 'https://podcast-studio.vercel.app';
+  const feedUrl  = `${process.env.RAILWAY_URL || 'https://podcast-studio-backend-production.up.railway.app'}/podcast/rss/${userId}`;
+  const now      = new Date().toUTCString();
+
+  const items = (podcasts || []).map(p => {
+    const audioUrl = `${baseUrl}/studio?id=${p.id}`;
+    const pubDate  = new Date(p.created_at).toUTCString();
+    const title    = p.series_title ? `${p.series_title} — Ep ${p.episode_number}: ${p.topic}` : p.topic;
+    const desc     = `A ${p.duration}-minute AI-generated ${p.tone.toLowerCase()} podcast on: ${p.topic}`;
+    return `
+    <item>
+      <title><![CDATA[${title}]]></title>
+      <description><![CDATA[${desc}]]></description>
+      <pubDate>${pubDate}</pubDate>
+      <guid isPermaLink="false">${p.id}</guid>
+      <link>${audioUrl}</link>
+      <enclosure url="${audioUrl}" length="0" type="audio/mpeg"/>
+      <itunes:duration>${p.duration}:00</itunes:duration>
+      <itunes:title><![CDATA[${title}]]></itunes:title>
+      <itunes:summary><![CDATA[${desc}]]></itunes:summary>
+      <itunes:explicit>no</itunes:explicit>
+    </item>`;
+  }).join('');
+
+  const rss = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"
+  xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+  xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>AI Podcast Studio — My Podcasts</title>
+    <link>${baseUrl}</link>
+    <description>AI-generated podcasts created with AI Podcast Studio</description>
+    <language>en</language>
+    <lastBuildDate>${now}</lastBuildDate>
+    <atom:link href="${feedUrl}" rel="self" type="application/rss+xml"/>
+    <itunes:author>AI Podcast Studio</itunes:author>
+    <itunes:explicit>no</itunes:explicit>
+    <itunes:image href="${baseUrl}/podcast-cover.jpg"/>
+    <itunes:category text="Technology"/>
+    ${items}
+  </channel>
+</rss>`;
+
+  res.setHeader('Content-Type', 'application/rss+xml; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(rss);
+});
+
+// ── Get user's RSS feed URL ───────────────────────────
+router.get('/my-rss-url', requireAuth, async (req, res) => {
+  const railwayUrl = process.env.RAILWAY_URL || 'https://podcast-studio-backend-production.up.railway.app';
+  res.json({ feedUrl: `${railwayUrl}/podcast/rss/${req.user.id}` });
+});
+
 // ── History ────────────────────────────────────────────
 router.get('/history', requireAuth, async (req, res) => {
   const { data, error } = await supabase.from('podcasts')
