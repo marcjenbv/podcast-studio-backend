@@ -845,10 +845,12 @@ router.get('/rss/:userId', async (req, res) => {
   const { data: user } = await supabase.from('users').select('email').eq('id', userId).single();
   if (!user) return res.status(404).send('User not found');
 
+  // Only serve podcasts the user has explicitly chosen to publish
   const { data: podcasts } = await supabase.from('podcasts')
-    .select('id, topic, language, tone, duration, created_at, series_title, episode_number')
+    .select('id, topic, language, tone, duration, created_at, series_title, episode_number, published_title, published_description')
     .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+    .eq('published', true)
+    .order('published_at', { ascending: false })
     .limit(50);
 
   const baseUrl  = process.env.FRONTEND_URL || 'https://podcast-studio.vercel.app';
@@ -899,6 +901,29 @@ router.get('/rss/:userId', async (req, res) => {
   res.send(rss);
 });
 
+// ── Publish / unpublish a podcast episode ────────────
+router.post('/publish-episode', requireAuth, async (req, res) => {
+  const { podcastId, publish, title, description } = req.body;
+  if (!podcastId) return res.status(400).json({ error: 'podcastId required' });
+
+  const { data: podcast } = await supabase.from('podcasts')
+    .select('id, user_id, topic')
+    .eq('id', podcastId)
+    .eq('user_id', req.user.id)
+    .single();
+
+  if (!podcast) return res.status(404).json({ error: 'Podcast not found' });
+
+  await supabase.from('podcasts').update({
+    published:             publish,
+    published_at:          publish ? new Date().toISOString() : null,
+    published_title:       title       || podcast.topic,
+    published_description: description || null,
+  }).eq('id', podcastId);
+
+  res.json({ published: publish });
+});
+
 // ── Get user's RSS feed URL ───────────────────────────
 router.get('/my-rss-url', requireAuth, async (req, res) => {
   const railwayUrl = process.env.RAILWAY_URL || 'https://podcast-studio-backend-production.up.railway.app';
@@ -908,10 +933,10 @@ router.get('/my-rss-url', requireAuth, async (req, res) => {
 // ── History ────────────────────────────────────────────
 router.get('/history', requireAuth, async (req, res) => {
   const { data, error } = await supabase.from('podcasts')
-    .select('id, topic, language, tone, duration, created_at')
+    .select('id, topic, language, tone, duration, created_at, published, published_at, published_title')
     .eq('user_id', req.user.id)
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(50);
   if (error) return res.status(500).json({ error: 'Failed to fetch history' });
   res.json({ podcasts: data });
 });

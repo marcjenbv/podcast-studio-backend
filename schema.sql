@@ -62,7 +62,11 @@ create table if not exists user_voices (
 );
 
 -- Edit tracking on podcasts
-alter table podcasts add column if not exists edit_count int not null default 0;
+alter table podcasts add column if not exists edit_count             int     not null default 0;
+alter table podcasts add column if not exists published              boolean not null default false;
+alter table podcasts add column if not exists published_at           timestamptz default null;
+alter table podcasts add column if not exists published_title        text    default null;
+alter table podcasts add column if not exists published_description  text    default null;
 
 alter table user_voices      disable row level security;
 alter table users            disable row level security;
