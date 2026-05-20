@@ -470,7 +470,7 @@ router.post('/generate', requireAuth, async (req, res) => {
       'onwK4e9ZLuTAKqWW03F9', // Daniel
       'XrExE9yKIg1WjnnlVkGX', // Matilda
       'bIHbv24MWmeRgasZH58o', // Will
-      '9BWtsMINqrJLrRacOk9x', // Aria
+      'nPczCjzI2devNBz1zQrb', // Aria
     ];
 
     // Build ordered list of voices: host first, then participants, then fallbacks
@@ -526,37 +526,28 @@ router.post('/generate', requireAuth, async (req, res) => {
     }).select('id').single();
 
     // Deduct minutes — only after podcast successfully saved
-    const plan = PLANS[req.user.subscription_plan];
-    if (!plan) {
-      const freeLeft = freeMinutesRemaining(req.user);
-      if (freeLeft >= duration) {
-        await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0) + duration }).eq('id', req.user.id);
-      } else {
-        const fromTopup = duration - freeLeft;
-        await supabase.from('users').update({
-          free_minutes_used: (req.user.free_minutes_used||0) + freeLeft,
-          minutes_topup:     Math.max(0, (req.user.minutes_topup||0) - fromTopup),
-        }).eq('id', req.user.id);
-      }
-    } else {
-      const periodStart   = new Date(req.user.period_start);
-      const now           = new Date();
-      const monthsElapsed = (now.getFullYear()-periodStart.getFullYear())*12+(now.getMonth()-periodStart.getMonth());
-      if (monthsElapsed > 0) {
-        await supabase.from('users').update({ minutes_used: duration, period_start: now.toISOString() }).eq('id', req.user.id);
-      } else {
-        const planRemaining = Math.max(0, plan.minutesPerPeriod - (req.user.minutes_used||0));
-        if (duration <= planRemaining) {
-          await supabase.from('users').update({ minutes_used: (req.user.minutes_used||0)+duration }).eq('id', req.user.id);
+      // Rollover model: minutes_used is a cumulative lifetime counter.
+      // minutesRemaining() in plans.js computes remaining as:
+      // (months_subscribed × plan.minutesPerPeriod) - minutes_used_lifetime
+      // So we simply always add to the lifetime total.
+      const plan = PLANS[req.user.subscription_plan];
+      if (!plan) {
+        const freeLeft = freeMinutesRemaining(req.user);
+        if (freeLeft >= duration) {
+          await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0) + duration }).eq('id', req.user.id);
         } else {
-          const fromTopup = duration - planRemaining;
+          const fromTopup = duration - freeLeft;
           await supabase.from('users').update({
-            minutes_used:  plan.minutesPerPeriod,
-            minutes_topup: Math.max(0, (req.user.minutes_topup||0) - fromTopup),
+            free_minutes_used: (req.user.free_minutes_used||0) + freeLeft,
+            minutes_topup:     Math.max(0, (req.user.minutes_topup||0) - fromTopup),
           }).eq('id', req.user.id);
         }
+      } else {
+        // Rollover: just increment lifetime total — no monthly reset logic needed
+        await supabase.from('users').update({
+          minutes_used: (req.user.minutes_used||0) + duration,
+        }).eq('id', req.user.id);
       }
-    }
 
     res.json({ podcastId: podcast?.id, turns: allTurns, voiceMap });
 
@@ -644,7 +635,7 @@ router.post('/generate-episode', requireAuth, async (req, res) => {
     // Build voiceMap
     const uniqueSpeakers = [...new Set(allTurns.map(t => t.speaker))];
     // v3-optimised stock voices — IVC voices respond best to audio tags per ElevenLabs docs
-    const ALL_VOICES = ['JBFqnCBsd6RMkjVDRZzb','EXAVITQu4vr4xnSDxMaL','TX3LPaxmHKxFdv7VOQHJ','XB0fDUnXU5powFXDhCwa','pFZP5JQG7iQjIQuC4Bku','onwK4e9ZLuTAKqWW03F9','XrExE9yKIg1WjnnlVkGX','CwhRBWXzGAHq8TQ4Fs17','SAz9YHcvj6GT2YYXdXww','9BWtsMINqrJLrRacOk9x'];
+    const ALL_VOICES = ['JBFqnCBsd6RMkjVDRZzb','EXAVITQu4vr4xnSDxMaL','TX3LPaxmHKxFdv7VOQHJ','XB0fDUnXU5powFXDhCwa','pFZP5JQG7iQjIQuC4Bku','onwK4e9ZLuTAKqWW03F9','XrExE9yKIg1WjnnlVkGX','CwhRBWXzGAHq8TQ4Fs17','SAz9YHcvj6GT2YYXdXww','nPczCjzI2devNBz1zQrb'];
     const voicePool = [];
     if (hostConfig?.name && hostConfig?.voiceId) voicePool.push({ speakerHint: hostConfig.name.toLowerCase(), voiceId: hostConfig.voiceId });
     participants.forEach(p => { if (!voicePool.find(v => v.voiceId === p.voiceId)) voicePool.push({ speakerHint: p.name.toLowerCase(), voiceId: p.voiceId }); });
@@ -672,29 +663,28 @@ router.post('/generate-episode', requireAuth, async (req, res) => {
     }).select('id').single();
 
     // Deduct minutes after successful save
-    const plan = PLANS[req.user.subscription_plan];
-    if (!plan) {
-      const freeLeft = freeMinutesRemaining(req.user);
-      if (freeLeft >= duration) {
-        await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0)+duration }).eq('id',req.user.id);
-      } else {
-        await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0)+freeLeft, minutes_topup: Math.max(0,(req.user.minutes_topup||0)-(duration-freeLeft)) }).eq('id',req.user.id);
-      }
-    } else {
-      const periodStart = new Date(req.user.period_start);
-      const now = new Date();
-      const monthsElapsed = (now.getFullYear()-periodStart.getFullYear())*12+(now.getMonth()-periodStart.getMonth());
-      if (monthsElapsed > 0) {
-        await supabase.from('users').update({ minutes_used: duration, period_start: now.toISOString() }).eq('id',req.user.id);
-      } else {
-        const planRemaining = Math.max(0, plan.minutesPerPeriod - (req.user.minutes_used||0));
-        if (duration <= planRemaining) {
-          await supabase.from('users').update({ minutes_used: (req.user.minutes_used||0)+duration }).eq('id',req.user.id);
+      // Rollover model: minutes_used is a cumulative lifetime counter.
+      // minutesRemaining() in plans.js computes remaining as:
+      // (months_subscribed × plan.minutesPerPeriod) - minutes_used_lifetime
+      // So we simply always add to the lifetime total.
+      const plan = PLANS[req.user.subscription_plan];
+      if (!plan) {
+        const freeLeft = freeMinutesRemaining(req.user);
+        if (freeLeft >= duration) {
+          await supabase.from('users').update({ free_minutes_used: (req.user.free_minutes_used||0) + duration }).eq('id', req.user.id);
         } else {
-          await supabase.from('users').update({ minutes_used: plan.minutesPerPeriod, minutes_topup: Math.max(0,(req.user.minutes_topup||0)-(duration-planRemaining)) }).eq('id',req.user.id);
+          const fromTopup = duration - freeLeft;
+          await supabase.from('users').update({
+            free_minutes_used: (req.user.free_minutes_used||0) + freeLeft,
+            minutes_topup:     Math.max(0, (req.user.minutes_topup||0) - fromTopup),
+          }).eq('id', req.user.id);
         }
+      } else {
+        // Rollover: just increment lifetime total — no monthly reset logic needed
+        await supabase.from('users').update({
+          minutes_used: (req.user.minutes_used||0) + duration,
+        }).eq('id', req.user.id);
       }
-    }
 
     res.json({ podcastId: podcast?.id, turns: allTurns, voiceMap });
   } catch(e) {
@@ -830,7 +820,7 @@ router.post('/edit-turn', requireAuth, async (req, res) => {
       edit_count: editCount + 1,
     }).eq('id', podcastId);
 
-    // Deduct minute if past free quota
+    // Deduct minute if past free quota — rollover: just increment cumulative total
     if (editCount >= FREE_EDITS) {
       const plan = PLANS[req.user.subscription_plan];
       if (!plan) {
