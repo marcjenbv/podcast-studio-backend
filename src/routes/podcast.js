@@ -138,21 +138,21 @@ function addEmotionTags(text) {
 }
 
 async function synthesizeVoice(text, voiceId, prevText = null, nextText = null, retries = 2) {
-  // Per ElevenLabs docs (2025):
-  // stability 0.40-0.50: emotional range without instability for conversation
-  // similarity_boost 0.75: documented sweet spot for clarity
-  // style 0: let the TEXT drive emotion via punctuation and word choice
-  //          (style > 0 causes over-acting and sounds theatrical, not natural)
-  // previous_text/next_text: CRITICAL for natural prosody — without this,
-  //   each turn sounds read in isolation. These parameters let ElevenLabs
-  //   know what came before/after so intonation flows naturally between speakers.
+  // Per ElevenLabs v3 docs:
+  // - Use eleven_v3 model for maximum expressiveness with audio tags
+  // - stability: Natural mode (0.50) = closest to original voice, balanced
+  //   Creative (~0.30) = more expressive but prone to hallucination
+  //   Robust (~0.75) = consistent but LESS responsive to audio tags (avoid for v3)
+  // - similarity_boost: 0.75 is the documented sweet spot
+  // - style: 0 — let TEXT and AUDIO TAGS drive emotion, not this slider
+  // - previous_text/next_text: critical for natural prosody between turns
   const body = {
     text,
-    model_id: 'eleven_multilingual_v2',
+    model_id: 'eleven_v3',
     voice_settings: {
-      stability:        0.45,
-      similarity_boost: 0.75,
-      style:            0,
+      stability:         0.50,   // Natural mode — responsive to tags, stable
+      similarity_boost:  0.75,   // Sweet spot per docs
+      style:             0,      // Tags drive emotion, not this
       use_speaker_boost: true,
     },
   };
@@ -193,6 +193,13 @@ function buildScriptPrompt(topic, context, langCode, tone, participants, duratio
     ? `Host (guides discussion, asks questions, does NOT debate): ${hostConfig.name}\n`
     : '';
 
+  // Apply v3-optimised prompt engineering per ElevenLabs documentation:
+  // - Min 250 chars per turn for stable generation
+  // - Expressive punctuation (ellipses, em dashes) shapes delivery
+  // - Audio tags [laughs], [sighs] etc. as performance directions
+  // - Capitalise for emphasis
+  // - Natural speech rhythms, emotional highs and lows
+  // - For dialogue: [curious], [giggling], [dramatic pause] etc.
   return `Write a COMPLETE ${duration}-minute ${tone.toLowerCase()} podcast in ${langName}.
 
 Topic: "${topic}"
@@ -338,13 +345,18 @@ ${episodeNumber === 1 ? `SERIES OPENER: Host introduces the entire series concep
 ━━━ ELEVENLABS ELEVEN_V3 AUDIO DIRECTION ━━━
 [tags] = PERFORMANCE DIRECTIONS. Use layered tags for emotional arcs.
 
-FULL TAG LIBRARY:
-[excited] [frustrated] [nervous] [tired] [sad] [angry] [curious] [skeptical]
-[resigned] [surprised] [relieved] [annoyed] [flustered] [sarcastic] [deadpan]
-[passionate] [amused] [confused] [fast-paced] [drawn out] [whispers] [emphatically]
-[hesitates] [stammers] [flatly] [dryly] [playfully] [laughs] [chuckles] [sighs]
-[exhales sharply] [gasps] [scoffs] [nervous laugh] [interrupting] [leaning in]
-[trailing off] [under breath] [as if realizing] [building momentum] [catching themselves]
+COMPLETE v3 TAG LIBRARY (from official ElevenLabs docs):
+VOICE: [whispers] [shouts] [fast-paced] [drawn out] [emphatically] [quietly] [flatly] [dryly]
+EMOTION: [excited] [frustrated] [nervous] [sad] [angry] [curious] [skeptical] [resigned]
+         [surprised] [relieved] [annoyed] [sarcastic] [deadpan] [passionate] [amused]
+SOUNDS: [laughs] [chuckles] [sighs] [exhales sharply] [gasps] [scoffs] [coughs] [snorts]
+         [nervous laugh] [bitter laugh] [clears throat]
+DELIVERY: [hesitates] [stammers] [interrupting] [leaning in] [trailing off] [under breath]
+          [as if realizing] [building momentum] [catching themselves] [dramatic pause]
+
+4. CAPITALISE for strong emphasis: "That is EXACTLY the problem." / "I had NO idea."
+5. NATURAL SPEECH RHYTHMS — short punchy sentences mixed with longer ones
+6. EMOTIONAL HIGHS AND LOWS — every exchange should have dynamic range
 
 EMOTIONAL ARCS — shift tags MID-SENTENCE:
 "[fast-paced, frustrated] No— that's not— [emphatically] completely wrong. [catching themselves, quieter] Sorry. Go on."
@@ -631,7 +643,8 @@ router.post('/generate-episode', requireAuth, async (req, res) => {
 
     // Build voiceMap
     const uniqueSpeakers = [...new Set(allTurns.map(t => t.speaker))];
-    const ALL_VOICES = ['pNInz6obpgDQGcFmaJgB','EXAVITQu4vr4xnSDxMaL','TX3LPaxmHKxFdv7VOQHJ','XB0fDUnXU5powFXDhCwa','Xb7hH8MSUJpSbSDYk0k2','iP95p4xoKVk53GoZ742B','onwK4e9ZLuTAKqWW03F9','XrExE9yKIg1WjnnlVkGX','bIHbv24MWmeRgasZH58o','9BWtsMINqrJLrRacOk9x'];
+    // v3-optimised stock voices — IVC voices respond best to audio tags per ElevenLabs docs
+    const ALL_VOICES = ['JBFqnCBsd6RMkjVDRZzb','EXAVITQu4vr4xnSDxMaL','TX3LPaxmHKxFdv7VOQHJ','XB0fDUnXU5powFXDhCwa','pFZP5JQG7iQjIQuC4Bku','onwK4e9ZLuTAKqWW03F9','XrExE9yKIg1WjnnlVkGX','CwhRBWXzGAHq8TQ4Fs17','SAz9YHcvj6GT2YYXdXww','9BWtsMINqrJLrRacOk9x'];
     const voicePool = [];
     if (hostConfig?.name && hostConfig?.voiceId) voicePool.push({ speakerHint: hostConfig.name.toLowerCase(), voiceId: hostConfig.voiceId });
     participants.forEach(p => { if (!voicePool.find(v => v.voiceId === p.voiceId)) voicePool.push({ speakerHint: p.name.toLowerCase(), voiceId: p.voiceId }); });
@@ -710,12 +723,14 @@ router.get('/voice-preview/:voiceId', async (req, res) => {
 
 // ── Voice cloning: create instant voice clone ────────
 router.post('/clone-voice', requireAuth, async (req, res) => {
-  // Expects multipart form data with audio file(s) and voice name
+  // Creates an Instant Voice Clone (IVC) — the correct type for eleven_v3
+  // Per ElevenLabs docs: PVCs are NOT optimised for v3. Use IVC for best results.
+  // IVC works immediately, no training required.
   const fetch2 = require('node-fetch');
   const FormData = require('form-data');
 
   const { name, description } = req.body;
-  const audioData = req.body.audioBase64; // base64 encoded audio
+  const audioData = req.body.audioBase64;
   const audioName = req.body.audioName || 'sample.mp3';
 
   if (!name || !audioData) return res.status(400).json({ error: 'name and audioBase64 required' });
@@ -723,11 +738,14 @@ router.post('/clone-voice', requireAuth, async (req, res) => {
   try {
     const form = new FormData();
     form.append('name', name);
-    form.append('description', description || `Custom voice for ${req.user.email}`);
-    // Convert base64 to buffer
+    // v3-optimised description — helps ElevenLabs understand intended delivery
+    const v3Desc = `${description || 'Custom voice'}. Optimised for conversational podcast delivery with emotional range. IVC for eleven_v3.`;
+    form.append('description', v3Desc);
     const audioBuffer = Buffer.from(audioData, 'base64');
     form.append('files', audioBuffer, { filename: audioName, contentType: 'audio/mpeg' });
     form.append('remove_background_noise', 'true');
+    // labels help with v3 performance
+    form.append('labels', JSON.stringify({ use_case: 'podcast', optimised_for: 'eleven_v3' }));
 
     const r = await fetch2('https://api.elevenlabs.io/v1/voices/add', {
       method: 'POST',
